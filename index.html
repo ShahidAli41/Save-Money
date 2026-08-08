@@ -549,6 +549,15 @@ const I18N = {
     new_note_title:'نیا نوٹ', edit_note_title:'نوٹ میں ترمیم', note_saved:'نوٹ محفوظ ہو گیا ✓', note_deleted:'نوٹ حذف ہو گیا',
     delete_note_confirm:'کیا آپ واقعی یہ نوٹ حذف کرنا چاہتے ہیں؟', untitled_note:'بلا عنوان', empty_note:'خالی نوٹ',
     task_reminder_toast:'⏰ یاد دہانی:', mark_done:'✓ مکمل کریں',
+    cloud_account:'☁️ کلاؤڈ اکاؤنٹ', cloud_sync_desc:'اپنا ڈیٹا محفوظ رکھنے اور دوسرے ڈیوائس پر بحال کرنے کے لیے اکاؤنٹ بنائیں۔',
+    cloud_email:'ای میل', cloud_password:'پاس ورڈ', cloud_signup_btn:'اکاؤنٹ بنائیں', cloud_login_btn:'لاگ ان کریں',
+    cloud_or:'یا', cloud_logged_in_as:'لاگ ان:', cloud_logout_btn:'لاگ آؤٹ', cloud_backup_btn:'☁️⬆️ کلاؤڈ پر بیک اپ کریں',
+    cloud_restore_btn:'☁️⬇️ کلاؤڈ سے بحال کریں', cloud_backup_desc:'موجودہ ڈیٹا کلاؤڈ اکاؤنٹ میں محفوظ کریں',
+    cloud_restore_desc:'کلاؤڈ سے ڈیٹا واپس لائیں (موجودہ ڈیٹا کی جگہ لے گا)', cloud_not_linked:'ابھی کوئی کلاؤڈ اکاؤنٹ لنک نہیں',
+    cloud_backing_up:'بیک اپ ہو رہا ہے...', cloud_restoring:'بحال ہو رہا ہے...', cloud_backup_success:'کلاؤڈ پر بیک اپ ہو گیا ✓',
+    cloud_restore_success:'کلاؤڈ سے بحال ہو گیا ✓', cloud_restore_none:'کلاؤڈ پر کوئی بیک اپ نہیں ملا',
+    cloud_restore_confirm:'کیا آپ واقعی کلاؤڈ سے بحال کرنا چاہتے ہیں؟ موجودہ ڈیٹا کی جگہ لے لے گا۔',
+    cloud_email_required:'ای میل اور پاس ورڈ درج کریں', cloud_generic_error:'کچھ غلط ہو گیا، دوبارہ کوشش کریں',
   },
   en: {
     nav_home:'Home', nav_ledger:'Ledger', nav_reports:'Reports', nav_calc:'Calculator', nav_todo:'Notes', nav_backup:'Backup', nav_contact:'Contact', nav_settings:'Settings',
@@ -612,6 +621,15 @@ const I18N = {
     new_note_title:'New Note', edit_note_title:'Edit Note', note_saved:'Note saved ✓', note_deleted:'Note deleted',
     delete_note_confirm:'Delete this note?', untitled_note:'Untitled', empty_note:'Empty note',
     task_reminder_toast:'⏰ Reminder:', mark_done:'✓ Mark Done',
+    cloud_account:'☁️ Cloud Account', cloud_sync_desc:'Create an account to back up your data and restore it on another device.',
+    cloud_email:'Email', cloud_password:'Password', cloud_signup_btn:'Create Account', cloud_login_btn:'Log In',
+    cloud_or:'or', cloud_logged_in_as:'Logged in:', cloud_logout_btn:'Log Out', cloud_backup_btn:'☁️⬆️ Backup to Cloud',
+    cloud_restore_btn:'☁️⬇️ Restore from Cloud', cloud_backup_desc:'Save your current data to your cloud account',
+    cloud_restore_desc:'Bring data back from the cloud (replaces current data)', cloud_not_linked:'No cloud account linked yet',
+    cloud_backing_up:'Backing up...', cloud_restoring:'Restoring...', cloud_backup_success:'Backed up to cloud ✓',
+    cloud_restore_success:'Restored from cloud ✓', cloud_restore_none:'No cloud backup found',
+    cloud_restore_confirm:'Restore from cloud? This will replace your current data.',
+    cloud_email_required:'Enter email and password', cloud_generic_error:'Something went wrong, please try again',
   }
 };
 let LANG = load('sp_lang','ur');
@@ -1902,6 +1920,8 @@ function renderSettings(){
       </div>
     </div>
 
+    ${renderCloudCard()}
+
     <div class="card" style="margin-bottom:12px;${lockOn?'border-color:var(--teal);':''}">
       <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
         <div>
@@ -2015,6 +2035,113 @@ function removeAuth(){
   renderSettings();
 }
 
+/* ════ CLOUD ACCOUNT (FIREBASE) — additive, does not touch local PIN/email app-lock above ════ */
+// Bridges to window.fb* functions exposed by the type="module" Firebase script near the end of the file.
+window.onFbAuthChange = function(){ if(S.tab==='settings') renderSettings(); };
+
+function fbFriendlyError(err){
+  const code = err && err.code ? err.code : '';
+  const map = {
+    'auth/email-already-in-use': LANG==='ur' ? 'یہ ای میل پہلے سے رجسٹرڈ ہے، لاگ ان کریں۔' : 'This email is already registered — try logging in.',
+    'auth/invalid-email': LANG==='ur' ? 'درست ای میل درج کریں' : 'Enter a valid email address.',
+    'auth/weak-password': LANG==='ur' ? 'پاس ورڈ کم از کم 6 حروف کا ہو' : 'Password should be at least 6 characters.',
+    'auth/user-not-found': LANG==='ur' ? 'اس ای میل سے کوئی اکاؤنٹ نہیں ملا' : "No account found with that email.",
+    'auth/wrong-password': LANG==='ur' ? 'غلط پاس ورڈ' : 'Incorrect password.',
+    'auth/invalid-credential': LANG==='ur' ? 'غلط ای میل یا پاس ورڈ' : 'Incorrect email or password.',
+    'auth/too-many-requests': LANG==='ur' ? 'بہت زیادہ کوششیں، تھوڑی دیر بعد کوشش کریں' : 'Too many attempts, please wait and try again.',
+    'auth/network-request-failed': LANG==='ur' ? 'نیٹ ورک خرابی، انٹرنیٹ چیک کریں' : 'Network error — check your connection.',
+  };
+  return map[code] || (err && err.message ? err.message : T('cloud_generic_error'));
+}
+
+function renderCloudCard(){
+  const fbUser = window.__fbState && window.__fbState.user;
+  if(fbUser){
+    return `
+    <div class="card" style="margin-bottom:12px;border-color:var(--teal);">
+      <div class="sh-title" style="margin-bottom:8px;">${T('cloud_account')}</div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:14px;">
+        ${T('cloud_logged_in_as')} <span style="color:var(--teal2);font-family:Inter,sans-serif;">${esc(fbUser.email||'')}</span>
+      </div>
+      <button class="btn-p" id="fb-backup-btn" style="margin-bottom:8px;" onclick="fbDoBackup()">${T('cloud_backup_btn')}</button>
+      <div style="font-size:11px;color:var(--t3);margin:-4px 0 12px;">${T('cloud_backup_desc')}</div>
+      <button class="btn-p" id="fb-restore-btn" style="margin-bottom:8px;background:linear-gradient(135deg,#4a1a6a,#6a2090);" onclick="fbDoRestore()">${T('cloud_restore_btn')}</button>
+      <div style="font-size:11px;color:var(--t3);margin:-4px 0 12px;">${T('cloud_restore_desc')}</div>
+      <button class="btn-s" onclick="fbDoLogout()">${T('cloud_logout_btn')}</button>
+    </div>`;
+  }
+  return `
+    <div class="card" style="margin-bottom:12px;">
+      <div class="sh-title" style="margin-bottom:8px;">${T('cloud_account')}</div>
+      <div style="font-size:11px;color:var(--t3);margin-bottom:14px;">${T('cloud_sync_desc')}</div>
+      <label class="lbl">${T('cloud_email')}</label>
+      <input class="inp inp-ltr" id="fb-email" type="email" placeholder="you@example.com"/>
+      <label class="lbl">${T('cloud_password')}</label>
+      <input class="inp inp-ltr" id="fb-password" type="password" placeholder="••••••••"/>
+      <button class="btn-p" id="fb-login-btn" style="margin-top:4px;" onclick="fbDoLogin()">${T('cloud_login_btn')}</button>
+      <button class="btn-s" id="fb-signup-btn" onclick="fbDoSignup()">${T('cloud_signup_btn')}</button>
+    </div>`;
+}
+
+async function fbDoSignup(){
+  const email=$('fb-email').value.trim(), pass=$('fb-password').value;
+  if(!email||!pass){ showToast(T('cloud_email_required')); return; }
+  const btn=$('fb-signup-btn'); if(btn) btn.style.pointerEvents='none';
+  try{
+    await window.fbSignUp(email,pass);
+    showToast(LANG==='ur'?'اکاؤنٹ بن گیا ✓':'Account created ✓');
+    renderSettings();
+  }catch(err){
+    showToast(fbFriendlyError(err));
+  }finally{ if(btn) btn.style.pointerEvents=''; }
+}
+async function fbDoLogin(){
+  const email=$('fb-email').value.trim(), pass=$('fb-password').value;
+  if(!email||!pass){ showToast(T('cloud_email_required')); return; }
+  const btn=$('fb-login-btn'); if(btn) btn.style.pointerEvents='none';
+  try{
+    await window.fbSignIn(email,pass);
+    showToast(LANG==='ur'?'لاگ ان ہو گئے ✓':'Logged in ✓');
+    renderSettings();
+  }catch(err){
+    showToast(fbFriendlyError(err));
+  }finally{ if(btn) btn.style.pointerEvents=''; }
+}
+async function fbDoLogout(){
+  try{ await window.fbSignOut(); showToast(LANG==='ur'?'لاگ آؤٹ ہو گئے':'Logged out'); renderSettings(); }
+  catch(err){ showToast(fbFriendlyError(err)); }
+}
+async function fbDoBackup(){
+  const btn=$('fb-backup-btn');
+  if(btn){ btn.textContent=T('cloud_backing_up'); btn.style.pointerEvents='none'; }
+  try{
+    await window.fbBackupToCloud({customers:S.customers,transactions:S.transactions,tasks:S.tasks,notes:S.notes});
+    showToast(T('cloud_backup_success'));
+  }catch(err){
+    showToast(fbFriendlyError(err));
+  }finally{
+    if(btn){ btn.textContent=T('cloud_backup_btn'); btn.style.pointerEvents=''; }
+  }
+}
+async function fbDoRestore(){
+  if(!confirm(T('cloud_restore_confirm'))) return;
+  const btn=$('fb-restore-btn');
+  if(btn){ btn.textContent=T('cloud_restoring'); btn.style.pointerEvents='none'; }
+  try{
+    const data=await window.fbRestoreFromCloud();
+    if(!data){ showToast(T('cloud_restore_none')); return; }
+    S.customers=data.customers||[]; S.transactions=data.transactions||[];
+    S.tasks=data.tasks||[]; S.notes=data.notes||[];
+    persist(); persistTodo();
+    showToast(T('cloud_restore_success'));
+    render();
+  }catch(err){
+    showToast(fbFriendlyError(err));
+  }finally{
+    if(btn){ btn.textContent=T('cloud_restore_btn'); btn.style.pointerEvents=''; }
+  }
+}
+
 /* ════ APP LOCK SCREEN (SHOWN BEFORE APP OPENS) ════ */
 let _lockPin='';
 function checkAppLock(){
@@ -2107,6 +2234,61 @@ function render(){
 // Initial Call
 initAppearance();
 checkAppLock();
+</script>
+<!-- Firebase Cloud Sync (additive — does not alter any existing app logic above) -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-app.js";
+  import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-analytics.js";
+  import {
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+    signOut, onAuthStateChanged, setPersistence, browserLocalPersistence
+  } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-auth.js";
+  import {
+    getFirestore, doc, setDoc, getDoc
+  } from "https://www.gstatic.com/firebasejs/12.17.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBLCCxNlCaJAqq_fzPf5wI2EpfJqjkZA2A",
+    authDomain: "save-money-e747f.firebaseapp.com",
+    projectId: "save-money-e747f",
+    storageBucket: "save-money-e747f.firebasestorage.app",
+    messagingSenderId: "778886297753",
+    appId: "1:778886297753:web:d82d4784f14338328da008",
+    measurementId: "G-W4D8HS7CFC"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  // Analytics is optional at runtime (can throw in embedded/iframe previews or when
+  // blocked) — guarded so it can never break Auth/Firestore below it.
+  let analytics;
+  isSupported().then(ok => { if (ok) { try { analytics = getAnalytics(app); } catch (e) { console.warn("Analytics disabled:", e); } } });
+
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+  setPersistence(auth, browserLocalPersistence).catch(()=>{});
+
+  window.__fbState = { user: null };
+
+  onAuthStateChanged(auth, (user) => {
+    window.__fbState.user = user;
+    if (typeof window.onFbAuthChange === 'function') window.onFbAuthChange(user);
+  });
+
+  // Exposed on window because the rest of the app (save-money.html's main script)
+  // is a classic script, not a module, so it can't import these directly.
+  window.fbSignUp = (email, password) => createUserWithEmailAndPassword(auth, email, password);
+  window.fbSignIn = (email, password) => signInWithEmailAndPassword(auth, email, password);
+  window.fbSignOut = () => signOut(auth);
+
+  window.fbBackupToCloud = async (data) => {
+    if (!auth.currentUser) throw new Error('not-authenticated');
+    await setDoc(doc(db, 'users', auth.currentUser.uid), { ...data, updatedAt: Date.now() });
+  };
+  window.fbRestoreFromCloud = async () => {
+    if (!auth.currentUser) throw new Error('not-authenticated');
+    const snap = await getDoc(doc(db, 'users', auth.currentUser.uid));
+    return snap.exists() ? snap.data() : null;
+  };
 </script>
 </body>
 </html>
